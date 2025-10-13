@@ -15,9 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build
     - name: Run tests
-      run: cargo test --verbose --all-features
+      run: cargo test --all-features
     - name: Notify team
       run: |
         echo "🚨 Hotfix branch '${{ github.ref_name }}' has been pushed and tested"
