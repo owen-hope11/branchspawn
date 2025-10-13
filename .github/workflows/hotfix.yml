@@ -1,0 +1,24 @@
+name: Hotfix
+
+on:
+  push:
+    branches:
+      - 'hotfix/*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  hotfix-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose --all-features
+    - name: Notify team
+      run: |
+        echo "🚨 Hotfix branch '${{ github.ref_name }}' has been pushed and tested"
+        echo "Consider creating a PR to main for immediate deployment"
