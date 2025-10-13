@@ -1,0 +1,27 @@
+services:
+  postgres:
+    container_name: ${CONTAINER_NAME:-postgres}
+    image: postgres:14-alpine
+    platform: linux/arm64/v8  # Use your native architecture instead
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    #volumes:
+    #  - ./db_dump2.sql:/docker-entrypoint-initdb.d/db_dump.sql
+    #  - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+#volumes:
+#  postgres-data:
+#    name: postgres-data-${BRANCH_SANITIZED:-main}
+#    driver: local
+#
