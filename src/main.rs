@@ -116,38 +116,52 @@ async fn check_port_conflict(docker: &Docker, port: u16, container_name: &str) -
     Ok(())
 }
 
-fn start_from_compose(_compose_file: &str) -> Result<(), String> {
-    println!("Starting container from compose file: {}", _compose_file);
+fn start_from_compose(_compose_file: &str, container_exists: bool) -> Result<(), String> {
 
-    let compose = Compose::builder()
-        .path(_compose_file)
-        .build()
-        .map_err(|e| format!("Failed to build compose: {}", e));
+    if container_exists {
+        // Use 'start' command for existing containers to preserve them
+        let output = Command::new("docker")
+            .arg("compose")
+            .arg("-f")
+            .arg(_compose_file)
+            .arg("start")
+            .output()
+            .map_err(|e| format!("Failed to execute docker compose start: {}", e))?;
 
-    if let Err(e) = compose?.up().exec() {
-        return Err(format!("Failed to start container: {}", e));
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Docker compose start failed: {}", stderr));
+        }
+        println!("Existing container started successfully");
+    } else {
+        // Use 'up' command for new containers
+        let compose = Compose::builder()
+            .path(_compose_file)
+            .build()
+            .map_err(|e| format!("Failed to build compose: {}", e));
+
+        if let Err(e) = compose?.up().exec() {
+            return Err(format!("Failed to start container: {}", e));
+        }
+        println!("New container created and started successfully");
     }
 
     Ok(())
 }
 
 async fn check_container_exists(docker: &Docker, container_name: &str) -> Result<bool, String> {
-        // List all containers with the specified port published
-    let containers = docker
-        .containers()
-        .list(&Default::default())
-        .await
-        .map_err(|e| format!("Failed to list containers: {}", e))?;
+    let container = docker.containers().get(container_name).inspect().await
+            .map_err(|e| format!("Failed to inspect container: {}", e))?;
 
-    for container in containers {
-        if let Some(names) = container.names {
+    if let Some(names) = container.name {
+        println!("Checking container names: {:?}", names);
             if names.contains(&format!("/{}", container_name)) {
                 return Ok(true);
             }
         }
+        Ok(false)
     }
-    Ok(false)
-}
+    
 
 async fn run() -> Result<(), String> {
     let cli = Cli::parse();
@@ -191,19 +205,23 @@ async fn run() -> Result<(), String> {
 
     if check_container_exists(&docker, &container_name).await? {
         println!("Container for branch '{}' already exists.", container_name);
-        if (docker.containers().get(&container_name).inspect().await
-            .map_err(|e| format!("Failed to inspect container: {}", e))?)
-            .state
-            .map_or(false, |state| state.status.unwrap() == "running") {
+        let container_info = docker.containers().get(&container_name).inspect().await
+            .map_err(|e| format!("Failed to inspect container: {}", e))?;
+        
+        let is_running = container_info.state
+            .map_or(false, |state| state.status.unwrap() == "running");
+        
+        if is_running {
             println!("Container is already running.");
             return Ok(());
+        } else {
+            println!("Container exists but is stopped. Starting it...");
+            start_from_compose(compose_file, true)?;
+            return Ok(());
         }
-        docker.containers().get(&container_name).start().await
-            .map_err(|e| format!("Failed to start existing container: {}", e))?;
-        return Ok(());
     } else {
         println!("No existing container for branch '{}'. Creating a new one...", container_name);
-        start_from_compose(compose_file)?;
+        start_from_compose(compose_file, false)?;
     }
 
     // Vary the output based on how many times the user used the "verbose" flag
