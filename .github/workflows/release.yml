@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build
+      run: cargo build --release
+
+    - name: Create release archive
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          cp target/release/branchspawn.exe branchspawn-${{ matrix.os }}.exe
+          echo "ASSET_NAME=branchspawn-${{ matrix.os }}.exe" >> $GITHUB_ENV
+          echo "ASSET_PATH=branchspawn-${{ matrix.os }}.exe" >> $GITHUB_ENV
+        else
+          cp target/release/branchspawn branchspawn-${{ matrix.os }}
+          echo "ASSET_NAME=branchspawn-${{ matrix.os }}" >> $GITHUB_ENV  
+          echo "ASSET_PATH=branchspawn-${{ matrix.os }}" >> $GITHUB_ENV
+        fi
+
+    - name: Upload to release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ env.ASSET_PATH }}
+        generate_release_notes: true

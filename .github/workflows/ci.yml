@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build
+    - name: Run tests
+      run: cargo test --all-features
+
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --release
+    - name: Test binary works
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          ./target/release/branchspawn.exe --version
+        else
+          ./target/release/branchspawn --version
+        fi
+
+  check-version:
+    name: Check Version Consistency
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - uses: actions/checkout@v4
+    - name: Check if version was updated
+      shell: bash
+      run: |
+        # Check if Cargo.toml was modified
+        if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "Cargo.toml"; then
+          echo "Cargo.toml was modified"
+          
+          # Extract version from current branch
+          CURRENT_VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Extract version from base branch
+          git fetch origin ${{ github.base_ref }}
+          BASE_VERSION=$(git show origin/${{ github.base_ref }}:Cargo.toml | grep '^version = ' | head -n1 | sed 's/version = "\(.*\)"/\1/')
+          echo "Base version: $BASE_VERSION"
+          
+          if [[ "$CURRENT_VERSION" == "$BASE_VERSION" ]]; then
+            echo "⚠️ Version in Cargo.toml was not updated"
+            echo "Please update the version number when making changes"
+            exit 1
+          else
+            echo "✅ Version was updated from $BASE_VERSION to $CURRENT_VERSION"
+          fi
+        else
+          echo "Cargo.toml was not modified - no version check needed"
+        fi
