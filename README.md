@@ -14,7 +14,7 @@ Download the appropriate binary for your platform from the [releases page](https
 
 #### Linux
 ```bash
-curl -L https://github.com/owen-hope11/branchspawn/releases/download/v0.1.0/branchspawn-ubuntu-latest -o branchspawn
+curl -L https://github.com/owen-hope11/branchspawn/releases/download/<Version_Number>/branchspawn-ubuntu-latest -o branchspawn
 chmod +x branchspawn
 ./branchspawn
 ```
@@ -23,14 +23,14 @@ chmod +x branchspawn
 Due to macOS Gatekeeper restrictions on unsigned binaries, use curl to download and install:
 
 ```bash
-curl -L https://github.com/owen-hope11/branchspawn/releases/download/v0.1.0/branchspawn-macos-latest -o branchspawn
+curl -L https://github.com/owen-hope11/branchspawn/releases/download/<Version_Number>/branchspawn-macos-latest -o branchspawn
 chmod +x branchspawn
 ./branchspawn
 ```
 
 #### Windows
 ```powershell
-Invoke-WebRequest -Uri https://github.com/owen-hope11/branchspawn/releases/download/v0.1.0/branchspawn-windows-latest.exe -OutFile branchspawn.exe
+Invoke-WebRequest -Uri https://github.com/owen-hope11/branchspawn/releases/download/<Version_Number>/branchspawn-windows-latest.exe -OutFile branchspawn.exe
 .\branchspawn.exe
 ```
 
