@@ -2,7 +2,7 @@ use clap::{Parser};
 use std::process;
 use std::process::Command;
 
-use docker_api::{opts::{ContainerStopOpts}, Docker, Result as DockerResult};
+use docker_api::{opts::ContainerStopOpts, Docker, Result as DockerResult};
 use std::io::{self, Write};
 use std::path::Path;
 use compose_rs::{Compose, ComposeCommand};
@@ -127,11 +127,19 @@ fn start_from_compose(_compose_file: &str, container_exists: bool) -> Result<(),
             .arg("start")
             .output()
             .map_err(|e| format!("Failed to execute docker compose start: {}", e))?;
-
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("Docker compose start failed: {}", stderr));
         }
+
+        // TODO: Wait till PR gets merged into repo
+        // let compose = Compose::builder()
+        //     .path(_compose_file)
+        //     .build()
+        //     .map_err(|e| format!("Failed to build compose: {}", e));
+        // if let Err(e) = compose?.start().exec() {
+        //     return Err(format!("Failed to start container: {}", e));
+        // }
         println!("Existing container started successfully");
     } else {
         // Use 'up' command for new containers
@@ -150,17 +158,15 @@ fn start_from_compose(_compose_file: &str, container_exists: bool) -> Result<(),
 }
 
 async fn check_container_exists(docker: &Docker, container_name: &str) -> Result<bool, String> {
-    let container = docker.containers().get(container_name).inspect().await
-            .map_err(|e| format!("Failed to inspect container: {}", e))?;
+    let container_result = docker.containers().get(container_name).inspect().await;
 
-    if let Some(names) = container.name {
-        println!("Checking container names: {:?}", names);
-            if names.contains(&format!("/{}", container_name)) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+    match container_result {
+        Ok(_) => {
+            println!("Container '{}' exists.", container_name);
+            Ok(true)},
+        Err(_) =>  Ok(false), // If inspection fails, assume container does not exist
     }
+}
     
 
 async fn run() -> Result<(), String> {
@@ -200,6 +206,7 @@ async fn run() -> Result<(), String> {
     let container_name = format!("{}-postgres", &clean_branch_name);
     println!("Container name will be: {}", container_name);
     env::set_var("CONTAINER_NAME", &container_name);
+    env::set_var("COMPOSE_PROJECT_NAME", format!("branchspawn-{}", &clean_branch_name));
 
     check_port_conflict(&docker, 5432, &container_name).await?;
 
