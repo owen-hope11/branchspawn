@@ -120,26 +120,13 @@ fn start_from_compose(_compose_file: &str, container_exists: bool) -> Result<(),
 
     if container_exists {
         // Use 'start' command for existing containers to preserve them
-        let output = Command::new("docker")
-            .arg("compose")
-            .arg("-f")
-            .arg(_compose_file)
-            .arg("start")
-            .output()
-            .map_err(|e| format!("Failed to execute docker compose start: {}", e))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Docker compose start failed: {}", stderr));
+        let compose = Compose::builder()
+            .path(_compose_file)
+            .build()
+            .map_err(|e| format!("Failed to build compose: {}", e));
+        if let Err(e) = compose?.start().exec() {
+            return Err(format!("Failed to start container: {}", e));
         }
-
-        // TODO: Wait till PR gets merged into repo
-        // let compose = Compose::builder()
-        //     .path(_compose_file)
-        //     .build()
-        //     .map_err(|e| format!("Failed to build compose: {}", e));
-        // if let Err(e) = compose?.start().exec() {
-        //     return Err(format!("Failed to start container: {}", e));
-        // }
         println!("Existing container started successfully");
     } else {
         // Use 'up' command for new containers
