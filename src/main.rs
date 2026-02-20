@@ -10,6 +10,10 @@ use compose_rs::{Compose, ComposeCommand};
 use std::env;
 use Result;
 
+/// Spin up a sandboxed Claude Code container for this branch
+#[arg(long)]
+claude_code: bool,
+
 /// BranchSpawn - A tool for managing git branches
 #[derive(Parser)]
 #[command(name = "branchspawn")]
@@ -62,6 +66,31 @@ fn get_current_branch() -> Result<String, String> {
 
     Ok(branch_name)
 }
+        
+fn launch_claude_code_session(container_name: &str) -> Result<(), String> {
+    println!("Launching Claude Code session in container '{}'...", container_name);
+    println!("Running with --dangerously-skip-permissions (safe inside sandbox)");
+
+    let status = Command::new("docker")
+        .arg("exec")
+        .arg("-it")
+        .arg(container_name)
+        .arg("claude")
+        .arg("--dangerously-skip-permissions")
+        .status()
+        .map_err(|e| format!("Failed to exec into container: {}", e))?;
+
+    if !status.success() {
+        return Err(format!(
+            "Claude Code exited with status: {}",
+            status.code().unwrap_or(-1)
+        ));
+    }
+
+    Ok(())
+}
+        
+         
 
 async fn check_port_conflict(docker: &Docker, port: u16, container_name: &str) -> Result<(), String> {
 
@@ -175,7 +204,11 @@ async fn run() -> Result<(), String> {
         }
     };
 
-        let compose_file = match &cli.compose_file_path {
+    if cli.claude_code {
+        return run_claude_code(&docker, &cli, &clean_branch_name).await;
+    }
+
+    let compose_file = match &cli.compose_file_path {
         Some(path) => {
             println!("Using custom compose file path: {}", path);
             if !Path::new(path).exists() {
@@ -226,6 +259,65 @@ async fn run() -> Result<(), String> {
         2 => println!("Debug mode: Extra verbose debug information enabled"),
         _ => println!("Debug mode: Don't be ridiculous"),
     }
+
+    Ok(())
+}
+
+async fn run_claude_code(docker: &Docker, cli: &Cli, clean_branch_name: &str) -> Result<(), String> {
+    // Validate ANTHROPIC_API_KEY is set
+    if env::var("ANTHROPIC_API_KEY").is_err() {
+        eprintln!("Warning: ANTHROPIC_API_KEY is not set. Claude Code will not be able to authenticate.");
+        eprintln!("Set it with: export ANTHROPIC_API_KEY=<your-key>");
+    }
+
+    let compose_file = match &cli.compose_file_path {
+        Some(path) => {
+            println!("Using custom compose file path: {}", path);
+            if !Path::new(path).exists() {
+                return Err(format!("Compose file does not exist at path: {}", path));
+            }
+            path.to_string()
+        }
+        None => {
+            let default_path = "compose.claude-code.yml";
+            println!("Using Claude Code compose file: {}", default_path);
+            default_path.to_string()
+        }
+    };
+
+    let container_name = format!("{}-claude-code", clean_branch_name);
+    println!("Claude Code container name will be: {}", container_name);
+
+    let project_dir = env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {}", e))?
+        .to_string_lossy()
+        .to_string();
+
+    env::set_var("CONTAINER_NAME", &container_name);
+    env::set_var("COMPOSE_PROJECT_NAME", format!("branchspawn-claude-{}", clean_branch_name));
+    env::set_var("PROJECT_DIR", &project_dir);
+
+    if check_container_exists(docker, &container_name).await? {
+        println!("Claude Code container for branch '{}' already exists.", container_name);
+        let container_info = docker.containers().get(&container_name).inspect().await
+            .map_err(|e| format!("Failed to inspect container: {}", e))?;
+
+        let is_running = container_info.state
+            .map_or(false, |state| state.status.unwrap() == "running");
+
+        if !is_running {
+            println!("Container exists but is stopped. Starting it...");
+            start_from_compose(&compose_file, true)?;
+        } else {
+            println!("Container is already running.");
+        }
+    } else {
+        println!("No existing Claude Code container for branch '{}'. Creating a new one...", container_name);
+        start_from_compose(&compose_file, false)?;
+        println!("Waiting for Claude Code to be installed in the container...");
+    }
+
+    launch_claude_code_session(&container_name)?;
 
     Ok(())
 }
