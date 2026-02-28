@@ -87,6 +87,24 @@ branchspawn -c ./docker/postgres.yml
 branchspawn -v
 ```
 
+### Automatic use on branch change
+
+Branchspawn can be incorporated in a post-checkout Git hook. Add it to this file (or create it): `$REPO_ROOT/.git/hooks/post-checkout`
+
+```bash
+#!/bin/bash
+# .git/hooks/post-checkout
+
+previous_head=$1
+new_head=$2
+branch_checkout=$3
+
+# Only run on branch changes, not file checkouts
+if [ $branch_checkout -eq 1 ]; then
+	branchspawn -f -c <OPTIONAL_FULL-PATH-TO-COMPOSE-FILE>
+fi
+```
+
 ### Command Line Options
 
 - `-b, --branch-name <NAME>`: Specify branch name (defaults to current git branch)
